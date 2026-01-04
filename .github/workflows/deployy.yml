@@ -1,0 +1,43 @@
+name: Deploy React App to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t react-frontend .
+
+      - name: Save Docker image
+        run: |
+          docker save react-frontend | gzip > react-frontend.tar.gz
+
+      - name: Copy image to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "react-frontend.tar.gz"
+          target: "/home/ubuntu"
+
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker load < react-frontend.tar.gz
+            docker stop react || true
+            docker rm react || true
+            docker run -d -p 8080:80 --name react react-frontend
